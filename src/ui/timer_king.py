@@ -54,6 +54,15 @@ class TimerKing(QMainWindow):
         self.home_widget = HomeWidget(self)
         self.time_track_widget = TimerWidget()
         
+        # Timer 위젯 설정
+        self.time_track_widget.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+        self.time_track_widget.reset_button.clicked.connect(self.reset_timer)
+        self.time_track_widget.app_combo.currentTextChanged.connect(self.on_app_selected)
+        
+        # 앱 리스트 초기화
+        self.running_apps = set()
+        self.update_app_list()
+        
         self.initUI()
         
         # 타이머 설정
@@ -273,15 +282,26 @@ class TimerKing(QMainWindow):
         QApplication.instance().quit()
 
     def show_timer(self):
-        self.time_track_widget.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
-        # 초기화 버튼 연결
-        self.time_track_widget.reset_button.clicked.connect(self.reset_timer)
-        # 콤보박스 변경 이벤트 연결
-        self.time_track_widget.app_combo.currentTextChanged.connect(self.on_app_selected)
-        # 앱 리스트 업데이트
+        """Timer 창을 표시합니다."""
+        # 창이 이미 표시되어 있다면 활성화만 합니다
+        if self.time_track_widget.isVisible():
+            self.time_track_widget.raise_()
+            self.time_track_widget.activateWindow()
+            return
+        
+        # 앱 리스트가 오래되었으면 업데이트
+        current_time = time.time()
+        if current_time - self._last_app_update >= self._app_cache_lifetime:
+            self.update_app_list()
+            
+        # 현재 선택된 앱 정보 업데이트
         current_app = self.timer_data.get('app_name')
         self.time_track_widget.update_app_list(self.running_apps, current_app)
+        
+        # 창 표시
         self.time_track_widget.show()
+        self.time_track_widget.raise_()
+        self.time_track_widget.activateWindow()
 
     def on_app_selected(self, app_name):
         if app_name and app_name != "Select App...":
