@@ -1,27 +1,34 @@
-# 맥 타임좌 (Mac Time Tracker)
+# Mac Time Tracker (맥 타임좌)
 
-맥 타임좌는 macOS용 앱 사용 시간 추적 애플리케이션입니다.
+A macOS application for tracking app usage time, built with Python and PyQt5.
 
-## 디렉토리 구조
+## Project Structure
 
 ```
 timer/
-├── src/               # 소스 코드
-│   ├── core/         # 핵심 기능
-│   │   ├── config.py         # 설정
-│   │   ├── data_manager.py   # 데이터 관리
-│   │   └── status_bar.py     # 상태바 컨트롤러
-│   ├── ui/           # 사용자 인터페이스
-│   │   ├── widgets/          # UI 위젯
-│   │   │   ├── app_tracking.py   # 앱 추적 위젯
-│   │   │   ├── home_widget.py    # 홈 화면 위젯
-│   │   │   └── timer_widget.py   # 타이머 위젯
-│   │   └── timer_setting.py  # 타이머 설정
-│   └── main.py       # 메인 실행 파일
-└── README.md         # 프로젝트 문서
+├── src/
+│   ├── core/          # Core functionality
+│   │   ├── config.py
+│   │   ├── data_manager.py
+│   │   └── status_bar.py
+│   ├── ui/            # User Interface
+│   │   ├── widgets/
+│   │   │   ├── app_tracking.py
+│   │   │   ├── home_widget.py
+│   │   │   └── timer_widget.py
+│   │   └── timer_setting.py
+│   └── main.py
+└── README.md
 ```
 
-## 요구사항
+## Features
+
+- Track app usage time
+- Display status in macOS menu bar
+- Timer functionality
+- Modern and minimalist UI
+
+## Requirements
 
 - Python 3.x
 - PyQt5
@@ -29,8 +36,39 @@ timer/
 - Cocoa
 - objc
 
-## 실행 방법
+## Installation
 
+1. Clone the repository:
+```bash
+git clone https://github.com/ksbelphegor/Mac_Timetracker.git
+cd Mac_Timetracker
+```
+
+2. Install dependencies:
+```bash
+pip install PyQt5 pyobjc-framework-Cocoa
+```
+
+## Usage
+
+Run the application:
 ```bash
 python src/main.py
 ```
+
+## Development
+
+The project is organized into several modules:
+
+- `core/`: Contains core functionality
+  - `config.py`: Configuration settings
+  - `data_manager.py`: Data handling and persistence
+  - `status_bar.py`: macOS status bar integration
+
+- `ui/`: User interface components
+  - `widgets/`: Individual UI widgets
+  - `timer_setting.py`: Timer configuration
+
+## License
+
+MIT License
