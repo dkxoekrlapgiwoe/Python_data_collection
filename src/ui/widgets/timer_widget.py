@@ -107,11 +107,14 @@ class TimerWidget(QWidget):
             if index >= 0:
                 self.app_combo.setCurrentIndex(index)
 
-    def update_time_display(self, total_time, window_time, current_window):
-        # 단순히 total_time만 표시
-        hours = int(total_time // 3600)
-        minutes = int((total_time % 3600) // 60)
-        seconds = int(total_time % 60)
-        
-        time_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        self.time_label.setText(time_text)
+    def update_time_display(self, total_time):
+        # 시간을 HH:MM:SS 형식으로 변환하여 표시
+        if isinstance(total_time, str):
+            self.time_label.setText(total_time)
+        else:
+            hours = int(total_time // 3600)
+            minutes = int((total_time % 3600) // 60)
+            seconds = int(total_time % 60)
+            
+            time_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            self.time_label.setText(time_text)

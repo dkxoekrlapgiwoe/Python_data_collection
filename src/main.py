@@ -7,8 +7,11 @@ src_dir = current_dir
 sys.path.append(src_dir)
 
 from PyQt5.QtWidgets import QApplication
-from ui.timer_setting import TimeTracker
+from ui.timer_king import TimerKing
 from core.data_manager import DataManager
+from core.config import APP_NAME, BUNDLE_ID
+import objc
+from Foundation import NSBundle
 
 def main():
     try:
@@ -18,9 +21,18 @@ def main():
         # 앱 실행
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(False)
+        app.setApplicationName(APP_NAME)
         
-        tracker = TimeTracker()
-        tracker.show()
+        # macOS 앱 설정
+        bundle = NSBundle.mainBundle()
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        if info:
+            info['CFBundleName'] = APP_NAME
+            info['CFBundleIdentifier'] = BUNDLE_ID
+            info['LSUIElement'] = True  # dock 아이콘 숨기기
+        
+        timer_app = TimerKing()
+        timer_app.show()
         
         sys.exit(app.exec_())
     except Exception as e:

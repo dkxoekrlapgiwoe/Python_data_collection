@@ -5,6 +5,10 @@ from PyQt5.QtGui import QFont, QPainter, QColor, QPen
 import time
 from datetime import datetime, timedelta
 from core.data_manager import DataManager
+import subprocess
+from Foundation import NSWorkspace
+import os
+from core.config import APP_NAME
 
 class TimeGraphWidget(QWidget):
     def __init__(self, parent=None):
@@ -108,7 +112,8 @@ class TimeGraphWidget(QWidget):
             # 해당 시각에 실행 중이던 앱 찾기
             active_apps = []
             for app_name, app_data in self.window().app_usage.items():
-                start_time = app_data.get('last_update', current_time) - app_data.get('total_time', 0)
+                start_time = max(day_start, 
+                              app_data.get('last_update', current_time) - app_data.get('total_time', 0))
                 end_time = app_data.get('last_update', current_time)
                 
                 if start_time <= hover_time <= end_time:
@@ -206,12 +211,21 @@ class Home_app_tracking(QWidget):
         # 시작 시간 및 업데이트 관련 변수 초기화
         self.start_time = time.time()
         self._last_update = time.time()
-        self._update_interval = 3.0
+        self._update_interval = 1.0  # 1초로 변경
         self._pending_updates = set()
         
+        # 앱 사용 시간 데이터
+        self.app_usage = DataManager.load_app_usage() or {}
+        self.active_app = None
+        self.active_window = None
+        self.active_start_time = None
+        
+        # 트리 위젯의 확장 상태 저장
+        self._expanded_items = set()
+        
         # 폰트 설정
-        self.app_font = QFont("Arial", 14)
-        self.window_font = QFont("Arial", 12)
+        self.app_font = QFont("Arial", 15)  # 14에서 15로 변경
+        self.window_font = QFont("Arial", 13)  # 12에서 13으로 변경
         
         # 캐시 및 상태 변수 초기화
         self._widgets_cache = {}
@@ -316,10 +330,17 @@ class Home_app_tracking(QWidget):
         """)
 
     def setup_timers(self):
+        # 앱 사용 시간 업데이트 타이머
+        self.update_timer = QTimer(self)
+        self.update_timer.timeout.connect(self.update_usage_stats)
+        self.update_timer.start(1000)  # 1초마다 업데이트
+        
+        # 총 시간 업데이트 타이머
         self.total_timer = QTimer(self)
         self.total_timer.timeout.connect(self.update_total_time)
         self.total_timer.start(1000)
         
+        # 레이아웃 업데이트 타이머
         self._layout_update_timer = QTimer(self)
         self._layout_update_timer.timeout.connect(self._update_layout)
         self._layout_update_timer.setSingleShot(True)
@@ -341,58 +362,228 @@ class Home_app_tracking(QWidget):
             return
 
         try:
-            main_window = self.window()
-            if not hasattr(main_window, 'app_usage'):
-                return
-
-            parent_font = QFont("Arial", 17)
-            child_font = QFont("Arial", 16)
-            
-            current_sort_column = self.tree_widget.sortColumn()
-            current_sort_order = self.tree_widget.header().sortIndicatorOrder()
-            
-            self.tree_widget.setSortingEnabled(False)
-            
-            for app_name, app_data in main_window.app_usage.items():
-                # 현재 활성화된 앱의 total_time 업데이트
-                if app_data.get('is_active', False):
-                    elapsed = current_time - app_data.get('last_update', current_time)
-                    app_data['total_time'] = app_data.get('total_time', 0) + elapsed
-                    app_data['last_update'] = current_time
-
-                if app_data['total_time'] > 0:
-                    app_item = self._get_or_create_item(app_name)
-                    app_item.setFont(0, parent_font)
-                    app_item.setFont(1, parent_font)
+            # 현재 활성 앱 정보 가져오기
+            active_app = NSWorkspace.sharedWorkspace().activeApplication()
+            if active_app:
+                app_bundle = active_app.get('NSApplicationBundleIdentifier', '')
+                app_name = active_app.get('NSApplicationName', '')
+                app_path = active_app.get('NSApplicationPath', '')
+                
+                print(f"Debug - App Info: name={app_name}, bundle={app_bundle}, path={app_path}")
+                
+                # Python 관련 프로세스인 경우 APP_NAME 사용
+                if (app_name.lower() in ['python', 'python3', 'python.app'] or 
+                    'python' in app_name.lower() or
+                    'python' in app_bundle.lower() or
+                    'python' in app_path.lower()):
+                    print(f"Debug - Detected Python process, changing name from {app_name} to {APP_NAME}")
+                    app_name = APP_NAME
+                
+                window_title = self.get_active_window_title()
+                print(f"Debug - Window Title: {window_title}")
+                
+                # 앱이 변경되었거나 처음 시작할 때
+                if app_name != self.active_app:
+                    if self.active_app and self.active_start_time:
+                        # 이전 앱의 사용 시간 업데이트
+                        elapsed = current_time - self.active_start_time
+                        self.update_app_time(self.active_app, self.active_window, elapsed)
                     
-                    total_time = app_data['total_time']
-                    hours = int(total_time // 3600)
-                    minutes = int((total_time % 3600) // 60)
-                    seconds = int(total_time % 60)
-                    time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                    app_item.setText(1, time_str)
-                    app_item.setData(1, Qt.UserRole, total_time)
-                    
-                    for window_name, window_time in app_data['windows'].items():
-                        window_item = self._get_or_create_window_item(app_item, window_name)
-                        window_item.setFont(0, child_font)
-                        window_item.setFont(1, child_font)
-                        
-                        w_hours = int(window_time // 3600)
-                        w_minutes = int((window_time % 3600) // 60)
-                        w_seconds = int(window_time % 60)
-                        w_time_str = f"{w_hours:02d}:{w_minutes:02d}:{w_seconds:02d}"
-                        window_item.setText(1, w_time_str)
-                        window_item.setData(1, Qt.UserRole, window_time)
-
-            self.tree_widget.setSortingEnabled(True)
-            self.tree_widget.sortItems(current_sort_column, current_sort_order)
+                    # 새 앱 정보 설정
+                    self.active_app = app_name
+                    self.active_window = window_title
+                    self.active_start_time = current_time
+                    print(f"Debug - App changed to: {app_name}")
+                elif window_title != self.active_window:
+                    # 같은 앱의 다른 창으로 전환
+                    if self.active_start_time:
+                        elapsed = current_time - self.active_start_time
+                        self.update_app_time(self.active_app, self.active_window, elapsed)
+                    self.active_window = window_title
+                    self.active_start_time = current_time
+                else:
+                    # 같은 앱을 계속 사용 중일 때도 시간 업데이트
+                    elapsed = current_time - self.active_start_time
+                    self.update_app_time(self.active_app, self.active_window, elapsed)
+                    self.active_start_time = current_time  # 시작 시간 갱신
             
+            # 트리 위젯 업데이트
+            self.update_tree_widget()
+            
+            # 현재 상태 저장
+            DataManager.save_app_usage(self.app_usage)
             self._last_update = current_time
 
         except Exception as e:
             print(f"Error in update_usage_stats: {e}")
-
+    
+    def update_app_time(self, app_name, window_title, elapsed):
+        """앱과 창의 사용 시간을 업데이트합니다."""
+        if not app_name:
+            return
+            
+        if app_name not in self.app_usage:
+            self.app_usage[app_name] = {
+                'total_time': 0,
+                'windows': {}
+            }
+        
+        self.app_usage[app_name]['total_time'] = self.app_usage[app_name].get('total_time', 0) + elapsed
+        
+        if window_title:
+            if 'windows' not in self.app_usage[app_name]:
+                self.app_usage[app_name]['windows'] = {}
+            self.app_usage[app_name]['windows'][window_title] = (
+                self.app_usage[app_name]['windows'].get(window_title, 0) + elapsed
+            )
+    
+    def update_tree_widget(self):
+        """트리 위젯의 내용을 업데이트합니다."""
+        current_sort_column = self.tree_widget.sortColumn()
+        current_sort_order = self.tree_widget.header().sortIndicatorOrder()
+        
+        # 현재 선택된 아이템 저장
+        selected_items = []
+        for item in self.tree_widget.selectedItems():
+            path = []
+            current = item
+            while current:
+                path.insert(0, current.text(0))
+                current = current.parent()
+            selected_items.append(path)
+        
+        # 현재 확장된 아이템들 저장
+        self._expanded_items = {
+            self.tree_widget.itemFromIndex(index).text(0)
+            for index in self._iter_tree_indexes()
+            if self.tree_widget.isExpanded(index)
+        }
+        
+        self.tree_widget.setSortingEnabled(False)
+        self.tree_widget.clear()
+        
+        # 아이템 맵 초기화 (경로로 아이템을 찾기 위함)
+        self._item_map = {}
+        
+        for app_name, app_data in self.app_usage.items():
+            total_time = app_data.get('total_time', 0)
+            if total_time > 0:
+                app_item = QTreeWidgetItem(self.tree_widget)
+                app_item.setText(0, app_name)
+                app_item.setFont(0, self.app_font)
+                app_item.setFont(1, self.app_font)
+                
+                time_str = self.format_time(total_time)
+                app_item.setText(1, time_str)
+                app_item.setData(1, Qt.UserRole, total_time)
+                
+                self._item_map[app_name] = app_item
+                
+                # 이전에 확장되어 있었다면 다시 확장
+                if app_name in self._expanded_items:
+                    self.tree_widget.expandItem(app_item)
+                
+                for window_name, window_time in app_data.get('windows', {}).items():
+                    window_item = QTreeWidgetItem(app_item)
+                    window_item.setText(0, window_name)
+                    window_item.setFont(0, self.window_font)
+                    window_item.setFont(1, self.window_font)
+                    
+                    window_time_str = self.format_time(window_time)
+                    window_item.setText(1, window_time_str)
+                    window_item.setData(1, Qt.UserRole, window_time)
+                    
+                    self._item_map[f"{app_name}/{window_name}"] = window_item
+        
+        # 이전에 선택된 아이템 복원
+        for path in selected_items:
+            item = None
+            full_path = ""
+            for i, name in enumerate(path):
+                full_path = "/".join(path[:i+1])
+                item = self._item_map.get(full_path)
+                if item:
+                    item.setSelected(True)
+                    if i < len(path) - 1:  # 마지막 아이템이 아니면 확장
+                        self.tree_widget.expandItem(item)
+        
+        self.tree_widget.setSortingEnabled(True)
+        self.tree_widget.sortItems(current_sort_column, current_sort_order)
+    
+    def _iter_tree_indexes(self):
+        """트리 위젯의 모든 인덱스를 순회합니다."""
+        def recurse(parent_index):
+            if not parent_index.isValid():
+                for i in range(self.tree_widget.topLevelItemCount()):
+                    child_index = self.tree_widget.model().index(i, 0)
+                    yield child_index
+                    yield from recurse(child_index)
+            else:
+                for i in range(self.tree_widget.model().rowCount(parent_index)):
+                    child_index = self.tree_widget.model().index(i, 0, parent_index)
+                    yield child_index
+                    yield from recurse(child_index)
+        
+        yield from recurse(self.tree_widget.rootIndex())
+    
+    def get_active_window_title(self):
+        """현재 활성 창의 제목을 가져옵니다."""
+        try:
+            active_app = NSWorkspace.sharedWorkspace().activeApplication()
+            if not active_app:
+                return None
+            
+            app_name = active_app['NSApplicationName']
+            app_path = active_app.get('NSApplicationPath', '')
+            
+            print(f"Debug - Active Window Check: app_name={app_name}, is_active={self.window().isActiveWindow() if hasattr(self, 'window') else False}")
+            
+            # 현재 앱이 맥 타임좌인 경우
+            if ('python' in app_name.lower() or 'python' in app_path.lower()):
+                # 현재 창이 활성화되어 있는지 확인
+                current_window = self.window() if hasattr(self, 'window') else None
+                if current_window and current_window.isActiveWindow():
+                    print("Debug - Detected Home UI is active")
+                    return 'Home'
+                
+                print(f"Debug - Window detection: has_window={hasattr(self, 'window')}, window_active={current_window.isActiveWindow() if current_window else False}")
+            
+            script = f'''
+                tell application "System Events"
+                    tell process "{app_name}"
+                        try
+                            get name of window 1
+                        on error
+                            return "{app_name}"
+                        end try
+                    end tell
+                end tell
+            '''
+            
+            p = subprocess.Popen(['osascript', '-e', script], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                out, err = p.communicate(timeout=0.3)
+                if p.returncode == 0 and out:
+                    window_title = out.decode('utf-8').strip()
+                    print(f"Debug - AppleScript window title: {window_title}")
+                    return window_title
+            except subprocess.TimeoutExpired:
+                p.kill()
+            
+            print(f"Debug - Fallback to app_name: {app_name}")
+            return app_name
+            
+        except Exception as e:
+            print(f"Debug - Error getting window title: {e}")
+            return None
+    
+    def format_time(self, seconds):
+        """초를 시:분:초 형식으로 변환합니다."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        seconds = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    
     def update_total_time(self):
         elapsed_time = time.time() - self.start_time
         hours, remainder = divmod(int(elapsed_time), 3600)
