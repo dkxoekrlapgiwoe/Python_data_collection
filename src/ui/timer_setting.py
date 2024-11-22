@@ -326,63 +326,25 @@ class TimeTracker(QMainWindow):
         except Exception as e:
             print(f"통계 업데이트 중 오류 발생: {e}")
 
+    def format_time(self, seconds):
+        """Convert seconds into a formatted time string (HH:MM:SS)."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        seconds = int(seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
     def update_time_display(self):
-        # Timer 창 업데이트
-        if self.timer_app_data['app_name']:
-            app_name = self.timer_app_data['app_name']
-            
-            # 현재 실행 중인 앱이 선택된 앱과 같은 경우에만 시간 증가
-            active_app = NSWorkspace.sharedWorkspace().activeApplication()
-            is_target_app_active = active_app and active_app['NSApplicationName'] == app_name
-            
-            # 배경색 변경
-            if is_target_app_active:
-                self.time_track_widget.time_frame.setStyleSheet("""
-                    QFrame {
-                        background-color: #CCE5FF;
-                        border-radius: 4px;
-                        padding: 5px;
-                    }
-                """)
-            else:
-                self.time_track_widget.time_frame.setStyleSheet("""
-                    QFrame {
-                        background-color: #FFCCCC;
-                        border-radius: 4px;
-                        padding: 5px;
-                    }
-                """)
-            
-            if is_target_app_active:
-                current_time = time.time()
-                
-                # 마지막 업데이트 시간이 없으면 재 시간으로 설정
-                if self.timer_app_data['start_time'] is None:
-                    self.timer_app_data['start_time'] = current_time
-                
-                # 시간 증가
-                time_diff = current_time - self.timer_app_data['start_time']
-                if 'current_total' not in self.timer_app_data:
-                    self.timer_app_data['current_total'] = 0
-                
-                self.timer_app_data['current_total'] += time_diff
-                
-                # 다음 업데이트를 위해 시작 시간 갱신
-                self.timer_app_data['start_time'] = current_time
-            else:
-                # 다른 앱이 활성화되어 있으면 시작 시간을 None으로 설정
-                self.timer_app_data['start_time'] = None
-            
-            # 시간 표시 업데이트
-            total_time = self.timer_app_data.get('current_total', 0)
-            self.time_track_widget.update_time_display(total_time, 0, "")
-            
-            # 상태바 업데이트
-            hours = int(total_time // 3600)
-            minutes = int((total_time % 3600) // 60)
-            seconds = int(total_time % 60)
-            time_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            self.status_bar_controller.updateTime_(time_text)
+        """상태바의 시간 표시를 업데이트합니다."""
+        if not self.timer_app_data or 'app_name' not in self.timer_app_data:
+            return
+        
+        app_name = self.timer_app_data['app_name']
+        if app_name not in self.app_usage:
+            return
+        
+        total_time = self.app_usage[app_name]['total_time']
+        time_text = self.format_time(total_time)
+        self.status_bar_controller.update_time_display(time_text)
 
     def update_app_list(self):
         current_time = time.time()
